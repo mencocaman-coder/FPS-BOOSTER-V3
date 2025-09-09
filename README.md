@@ -1,11 +1,98 @@
--- FPS Booster Ultra AutomÃ¡tico para Roblox (Super agressivo, leve e seguro)
--- Aplica as otimizaÃ§Ãµes mÃ¡ximas assim que executado
+-- FPS Booster Ultra Automático (super agressivo, leve e seguro)
+-- Créditos: @PepsiMannumero1  # Yotube
 
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local PlayerGui = player:WaitForChild("PlayerGui")
+local LocalizationService = game:GetService("LocalizationService")
+
+-- Traduções para "Fps Booster ativado"
+local translations_fps = {
+    ["en"] = "Fps Booster activated",
+    ["es"] = "Fps Booster activado",
+    ["fr"] = "Fps Booster activé",
+    ["de"] = "Fps Booster aktiviert",
+    ["ru"] = "Fps Booster активирован",
+    ["it"] = "Fps Booster attivato",
+    ["tr"] = "Fps Güçlendirici etkinleştirildi",
+    ["pt"] = "Fps Booster ativado",
+    ["ja"] = "FPSブースターが有効化されました",
+    ["ko"] = "Fps 부스터가 활성화되었습니다",
+    ["zh"] = "Fps加速器已激活",
+}
+
+local translations_mom = {
+    ["en"] = "Your mom",
+    ["es"] = "Tu mamá",
+    ["fr"] = "Ta mère",
+    ["de"] = "Deine Mutter",
+    ["ru"] = "Твоя мама",
+    ["it"] = "Tua madre",
+    ["tr"] = "Annen",
+    ["pt"] = "Sua mãe",
+    ["ja"] = "あなたのお母さん",
+    ["ko"] = "너희 엄마",
+    ["zh"] = "你妈",
+}
+
+local function getLocaleText(translations)
+    local locale = LocalizationService.RobloxLocaleId or "en"
+    locale = locale:sub(1,2):lower()
+    return translations[locale] or translations["en"]
+end
+
+local function showDialog(text, color, duration)
+    local old = PlayerGui:FindFirstChild("FPSBoosterMsgGui")
+    if old then old:Destroy() end
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "FPSBoosterMsgGui"
+    gui.ResetOnSpawn = false
+    gui.IgnoreGuiInset = true
+
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0.5, 0, 0.12, 0)
+    frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
+    frame.BorderSizePixel = 0
+    frame.Parent = gui
+
+    local uicorner = Instance.new("UICorner")
+    uicorner.CornerRadius = UDim.new(0.15,0)
+    uicorner.Parent = frame
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1,0,1,0)
+    label.Position = UDim2.new(0,0,0,0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = color or Color3.fromRGB(0, 174, 255)
+    label.Font = Enum.Font.GothamBlack
+    label.TextScaled = true
+    label.TextWrapped = true
+    label.Parent = frame
+
+    gui.Parent = PlayerGui
+
+    wait(duration or 1.5)
+    gui:Destroy()
+end
+
+-- FPS Booster ativado (traduzido)
+showDialog(getLocaleText(translations_fps), Color3.fromRGB(0,174,255), 1.5)
+wait(1.5)
+-- Créditos
+showDialog("@PepsiMannumero1  # Yotube", Color3.fromRGB(0,174,255), 1.5)
+wait(1.5)
+-- "Sua mãe" traduzido
+showDialog(getLocaleText(translations_mom), Color3.fromRGB(255,255,255), 1.5)
+
+-- FPS BOOSTER (inalterado)
 local ws = game:GetService("Workspace")
 local lighting = game:GetService("Lighting")
 
 local function cleanPart(obj)
-    -- Remove partÃ­culas e efeitos de partes
     pcall(function()
         if obj:IsA("BasePart") then
             obj.Material = Enum.Material.SmoothPlastic
@@ -32,12 +119,10 @@ local function cleanPart(obj)
 end
 
 local function boost()
-    -- Otimiza todas as partes do workspace
     for _, obj in ipairs(ws:GetDescendants()) do
         cleanPart(obj)
     end
 
-    -- Remove todos os efeitos de iluminaÃ§Ã£o
     for _, v in ipairs(lighting:GetChildren()) do
         if v:IsA("Sky") or v:IsA("Atmosphere") or v:IsA("Clouds")
         or v:IsA("BloomEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect")
@@ -46,7 +131,6 @@ local function boost()
         end
     end
 
-    -- Configura iluminaÃ§Ã£o para o mÃ­nimo possÃ­vel
     pcall(function()
         lighting.GlobalShadows = false
         lighting.FogEnd = 1e10
@@ -58,7 +142,6 @@ local function boost()
         lighting.EnvironmentSpecularScale = 0
     end)
 
-    -- Configura o terreno
     local terrain = ws:FindFirstChildOfClass("Terrain")
     if terrain then
         pcall(function()
@@ -71,13 +154,8 @@ local function boost()
     end
 end
 
--- Aplica boost em tudo assim que executar
 boost()
-
--- Aplica nas novas partes que aparecerem no jogo
 ws.DescendantAdded:Connect(cleanPart)
-
--- Reaplica boost a cada 10 segundos (caso algo volte)
 while true do
     wait(10)
     boost()
