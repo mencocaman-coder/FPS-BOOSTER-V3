@@ -1,162 +1,170 @@
--- FPS Booster Ultra Automático (super agressivo, leve e seguro)
--- Créditos: @PepsiMannumero1  # Yotube
+-- FPS Booster Automático com Créditos (@PepsiMannumero1 #Youtube)
+-- Cole este script no executor como LocalScript
 
-local Players = game:GetService("Players")
-local player = Players.LocalPlayer
+local Players    = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Lighting   = game:GetService("Lighting")
+local Workspace  = game:GetService("Workspace")
+
+local player    = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
-local LocalizationService = game:GetService("LocalizationService")
 
--- Traduções para "Fps Booster ativado"
-local translations_fps = {
-    ["en"] = "Fps Booster activated",
-    ["es"] = "Fps Booster activado",
-    ["fr"] = "Fps Booster activé",
-    ["de"] = "Fps Booster aktiviert",
-    ["ru"] = "Fps Booster активирован",
-    ["it"] = "Fps Booster attivato",
-    ["tr"] = "Fps Güçlendirici etkinleştirildi",
-    ["pt"] = "Fps Booster ativado",
-    ["ja"] = "FPSブースターが有効化されました",
-    ["ko"] = "Fps 부스터가 활성화되었습니다",
-    ["zh"] = "Fps加速器已激活",
+-- CONFIGURAÇÃO INTERNA
+local Config = {
+    fpsOnThreshold   = 50,   -- abaixo disso ativa o booster
+    fpsOffThreshold  = 75,   -- acima disso desativa o booster
+    sampleSize       = 30,   -- frames para média móvel de FPS
+    messageDuration  = 1.4,  -- duração de cada crédito na tela
+    creditMessages   = {
+        "FPS Booster ativado!",
+        "@PepsiMannumero1  #Youtube",
+        "Sua mãe"
+    }
 }
 
-local translations_mom = {
-    ["en"] = "Your mom",
-    ["es"] = "Tu mamá",
-    ["fr"] = "Ta mère",
-    ["de"] = "Deine Mutter",
-    ["ru"] = "Твоя мама",
-    ["it"] = "Tua madre",
-    ["tr"] = "Annen",
-    ["pt"] = "Sua mãe",
-    ["ja"] = "あなたのお母さん",
-    ["ko"] = "너희 엄마",
-    ["zh"] = "你妈",
+-- Armazena valores originais de Lighting e efeitos
+local originalLighting = {
+    Brightness               = Lighting.Brightness,
+    GlobalShadows            = Lighting.GlobalShadows,
+    OutdoorAmbient           = Lighting.OutdoorAmbient,
+    Ambient                  = Lighting.Ambient,
+    FogEnd                   = Lighting.FogEnd,
+    FogStart                 = Lighting.FogStart,
+    EnvironmentDiffuseScale  = Lighting.EnvironmentDiffuseScale,
+    EnvironmentSpecularScale = Lighting.EnvironmentSpecularScale,
+    Effects                  = {}
 }
-
-local function getLocaleText(translations)
-    local locale = LocalizationService.RobloxLocaleId or "en"
-    locale = locale:sub(1,2):lower()
-    return translations[locale] or translations["en"]
+for _, eff in ipairs(Lighting:GetDescendants()) do
+    if eff:IsA("PostEffect") then
+        originalLighting.Effects[eff] = eff.Enabled
+    end
 end
 
-local function showDialog(text, color, duration)
-    local old = PlayerGui:FindFirstChild("FPSBoosterMsgGui")
-    if old then old:Destroy() end
+local boosterEnabled = false
+local fpsBuffer      = {}
 
+-- Exibe apenas as mensagens de crédito no spawn
+local function showCredit(text)
     local gui = Instance.new("ScreenGui")
-    gui.Name = "FPSBoosterMsgGui"
+    gui.Name         = "FPSBoosterCredit"
     gui.ResetOnSpawn = false
-    gui.IgnoreGuiInset = true
+    gui.Parent       = PlayerGui
 
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0.5, 0, 0.12, 0)
-    frame.Position = UDim2.new(0.5, 0, 0.5, 0)
-    frame.AnchorPoint = Vector2.new(0.5, 0.5)
-    frame.BackgroundColor3 = Color3.fromRGB(25,25,25)
-    frame.BorderSizePixel = 0
-    frame.Parent = gui
+    local frame = Instance.new("Frame", gui)
+    frame.Size               = UDim2.new(0.4,0,0.1,0)
+    frame.Position           = UDim2.new(0.5,0,0.8,0)
+    frame.AnchorPoint        = Vector2.new(0.5,0.5)
+    frame.BackgroundColor3   = Color3.fromRGB(30,30,30)
+    frame.BorderSizePixel    = 0
 
-    local uicorner = Instance.new("UICorner")
-    uicorner.CornerRadius = UDim.new(0.15,0)
-    uicorner.Parent = frame
+    local corner = Instance.new("UICorner", frame)
+    corner.CornerRadius      = UDim.new(0.2, 0)
 
-    local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1,0,1,0)
-    label.Position = UDim2.new(0,0,0,0)
+    local label = Instance.new("TextLabel", frame)
+    label.Size               = UDim2.new(1,0,1,0)
     label.BackgroundTransparency = 1
-    label.Text = text
-    label.TextColor3 = color or Color3.fromRGB(0, 174, 255)
-    label.Font = Enum.Font.GothamBlack
-    label.TextScaled = true
-    label.TextWrapped = true
-    label.Parent = frame
+    label.Font               = Enum.Font.GothamBold
+    label.TextScaled         = true
+    label.TextWrapped        = true
+    label.TextColor3         = Color3.fromRGB(0,174,255)
+    label.Text               = text
 
-    gui.Parent = PlayerGui
-
-    wait(duration or 1.5)
-    gui:Destroy()
+    task.delay(Config.messageDuration, function()
+        gui:Destroy()
+    end)
 end
 
--- FPS Booster ativado (traduzido)
-showDialog(getLocaleText(translations_fps), Color3.fromRGB(0,174,255), 1.5)
-wait(1.5)
--- Créditos
-showDialog("@PepsiMannumero1  # Yotube", Color3.fromRGB(0,174,255), 1.5)
-wait(1.5)
--- "Sua mãe" traduzido
-showDialog(getLocaleText(translations_mom), Color3.fromRGB(255,255,255), 1.5)
+-- Sequência de créditos
+task.spawn(function()
+    for _, msg in ipairs(Config.creditMessages) do
+        showCredit(msg)
+        task.wait(Config.messageDuration)
+    end
+end)
 
--- FPS BOOSTER (inalterado)
-local ws = game:GetService("Workspace")
-local lighting = game:GetService("Lighting")
-
-local function cleanPart(obj)
-    pcall(function()
-        if obj:IsA("BasePart") then
-            obj.Material = Enum.Material.SmoothPlastic
+-- Otimização de partículas, partes e luzes
+local function optimizeObj(obj)
+    if obj:IsA("ParticleEmitter") or obj:IsA("Trail")
+    or obj:IsA("Smoke") or obj:IsA("Sparkles")
+    or obj:IsA("Fire") or obj:IsA("Explosion") then
+        pcall(function()
+            obj.Enabled  = false
+            obj.Lifetime = NumberRange.new(0)
+            obj.Rate     = 0
+        end)
+    elseif obj:IsA("BasePart") then
+        pcall(function()
+            obj.Material    = Enum.Material.SmoothPlastic
+            obj.CastShadow  = false
             obj.Reflectance = 0
-            obj.CastShadow = false
-        end
-    end)
-    if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Smoke")
-    or obj:IsA("Sparkles") or obj:IsA("Fire") or obj:IsA("Explosion") then
-        pcall(function() obj.Enabled = false end)
-        pcall(function() obj.Visible = false end)
-        pcall(function() obj.Lifetime = NumberRange.new(0) end)
-    end
-    if obj:IsA("Decal") or obj:IsA("Texture") then
-        pcall(function() obj.Transparency = 1 end)
-    end
-    if obj:IsA("PointLight") or obj:IsA("SpotLight") or obj:IsA("SurfaceLight") then
+        end)
+    elseif obj:IsA("PointLight") or obj:IsA("SpotLight")
+       or obj:IsA("SurfaceLight") then
         pcall(function()
-            obj.Enabled = false
-            obj.Brightness = 0
-            obj.Range = 0
+            obj.Brightness = math.clamp(obj.Brightness or 1, 0.3, 1)
+            obj.Range      = math.clamp(obj.Range or 8, 6, 16)
         end)
     end
 end
 
-local function boost()
-    for _, obj in ipairs(ws:GetDescendants()) do
-        cleanPart(obj)
+-- Aplica ajustes de Lighting
+local function applyLighting()
+    for eff, _ in pairs(originalLighting.Effects) do
+        pcall(function() eff.Enabled = false end)
+    end
+    Lighting.Brightness               = math.max(1.5, Lighting.Brightness)
+    Lighting.GlobalShadows            = false
+    Lighting.OutdoorAmbient           = Color3.new(0.8,0.8,0.8)
+    Lighting.Ambient                  = Color3.new(0.8,0.8,0.8)
+    Lighting.FogEnd                   = 1e5
+    Lighting.FogStart                 = 99999
+    Lighting.EnvironmentDiffuseScale  = 0
+    Lighting.EnvironmentSpecularScale = 0
+end
+
+-- Restaura iluminação original
+local function restoreLighting()
+    local o = originalLighting
+    Lighting.Brightness               = o.Brightness
+    Lighting.GlobalShadows            = o.GlobalShadows
+    Lighting.OutdoorAmbient           = o.OutdoorAmbient
+    Lighting.Ambient                  = o.Ambient
+    Lighting.FogEnd                   = o.FogEnd
+    Lighting.FogStart                 = o.FogStart
+    Lighting.EnvironmentDiffuseScale  = o.EnvironmentDiffuseScale
+    Lighting.EnvironmentSpecularScale = o.EnvironmentSpecularScale
+    for eff, enabled in pairs(o.Effects) do
+        pcall(function() eff.Enabled = enabled end)
+    end
+end
+
+-- Otimiza novos objetos apenas quando booster ativo
+Workspace.DescendantAdded:Connect(function(obj)
+    if boosterEnabled then
+        optimizeObj(obj)
+    end
+end)
+
+-- Loop de Heartbeat: coleta FPS e ativa/desativa automaticamente
+RunService.Heartbeat:Connect(function(dt)
+    table.insert(fpsBuffer, 1/dt)
+    if #fpsBuffer > Config.sampleSize then
+        table.remove(fpsBuffer, 1)
     end
 
-    for _, v in ipairs(lighting:GetChildren()) do
-        if v:IsA("Sky") or v:IsA("Atmosphere") or v:IsA("Clouds")
-        or v:IsA("BloomEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect")
-        or v:IsA("DepthOfFieldEffect") or v:IsA("BlurEffect") then
-            pcall(function() v:Destroy() end)
+    local sum = 0
+    for _, v in ipairs(fpsBuffer) do sum += v end
+    local avgFPS = sum / #fpsBuffer
+
+    if not boosterEnabled and avgFPS < Config.fpsOnThreshold then
+        boosterEnabled = true
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            optimizeObj(obj)
         end
+        applyLighting()
+
+    elseif boosterEnabled and avgFPS > Config.fpsOffThreshold then
+        boosterEnabled = false
+        restoreLighting()
     end
-
-    pcall(function()
-        lighting.GlobalShadows = false
-        lighting.FogEnd = 1e10
-        lighting.FogStart = 1e10
-        lighting.Brightness = 1
-        lighting.OutdoorAmbient = Color3.new(0.5, 0.5, 0.5)
-        lighting.Ambient = Color3.new(0.5, 0.5, 0.5)
-        lighting.EnvironmentDiffuseScale = 0
-        lighting.EnvironmentSpecularScale = 0
-    end)
-
-    local terrain = ws:FindFirstChildOfClass("Terrain")
-    if terrain then
-        pcall(function()
-            terrain.WaterReflectance = 0
-            terrain.WaterTransparency = 1
-            terrain.WaterWaveSize = 0
-            terrain.WaterWaveSpeed = 0
-            terrain.Decorations = false
-        end)
-    end
-end
-
-boost()
-ws.DescendantAdded:Connect(cleanPart)
-while true do
-    wait(10)
-    boost()
-end
+end)
