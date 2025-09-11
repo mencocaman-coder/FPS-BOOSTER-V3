@@ -1,6 +1,6 @@
--- FPS Booster Ultimate v1.0
+-- FPS Booster v2.0 – Corrigido e otimizado
 -- Créditos: Sua mãe, @PepsiMannumero1 & @Lr-Scripts
--- Melhorias: qualidade mínima, streaming, delay no lobby, sem acumular listeners
+-- Melhorias: qualidade mínima, streaming, delay de lobby, um único listener
 
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
@@ -11,7 +11,7 @@ local CollectionService = game:GetService("CollectionService")
 local player    = Players.LocalPlayer
 local PlayerGui = player:WaitForChild("PlayerGui")
 
--- Configurações gráficas mínimas
+-- FORÇAR QUALIDADE GRÁFICA MÍNIMA
 pcall(function()
     settings().Rendering.QualityLevel            = 1
     settings().Rendering.MeshPartDetailLevel     = Enum.MeshPartDetailLevel.Low
@@ -19,35 +19,35 @@ pcall(function()
     settings().Rendering.InterpolationThrottling = true
 end)
 
--- Ativa streaming para reduzir carga do lobby
+-- ATIVAR STREAMING PARA ALÍVIO NO LOBBY
 Workspace.StreamingEnabled = true
 
--- Parâmetros configuráveis
+-- PARÂMETROS
 local BATCH_SIZE    = 20
 local FPS_THRESHOLD = 75
 local SAMPLE_SIZE   = 30
-local LOBBY_DELAY   = 10     -- segundos para evitar otimização imediata no lobby
-local creditTime    = 1.4
+local LOBBY_DELAY   = 10    -- segundos antes de iniciar otimização
+local CREDIT_TIME   = 1.4
 
--- Créditos na tela (uma única vez)
+-- CRÉDITOS (MOSTRAR UMA VEZ)
 local credits = {
     "FPS Booster ativado!",
-    "@PepsiMannumero1 & @Lr-Scripts",
+    "@PepsiMannumero1 & @Lr-Scripts no YouTube",
     "Sua mãe"
 }
 
--- Estado interno
+-- ESTADO INTERNO
 local optimizeQueue = {}
 local fpsBuffer     = {}
 local boosterActive = false
 local inLobby       = true
 
--- Função para exibir um crédito
+-- EXIBE UMA MENSAGEM DE CRÉDITO
 local function showCredit(text)
     local gui = Instance.new("ScreenGui")
-    gui.Name             = "FPSBoosterCredits"
-    gui.ResetOnSpawn     = false
-    gui.Parent           = PlayerGui
+    gui.Name         = "FPSBoosterCredits"
+    gui.ResetOnSpawn = false
+    gui.Parent       = PlayerGui
 
     local frame = Instance.new("Frame", gui)
     frame.Size            = UDim2.new(0.4, 0, 0.1, 0)
@@ -66,20 +66,20 @@ local function showCredit(text)
     label.TextColor3             = Color3.fromRGB(0,174,255)
     label.Text                   = text
 
-    task.delay(creditTime, function()
+    task.delay(CREDIT_TIME, function()
         gui:Destroy()
     end)
 end
 
--- Exibe os créditos em sequência
+-- MOSTRA TODOS OS CRÉDITOS EM SEQUÊNCIA
 task.spawn(function()
-    for _, text in ipairs(credits) do
-        showCredit(text)
-        task.wait(creditTime)
+    for _, txt in ipairs(credits) do
+        showCredit(txt)
+        task.wait(CREDIT_TIME)
     end
 end)
 
--- Ajustes de iluminação e pós-processamento (apenas uma vez)
+-- AJUSTES DE ILUMINAÇÃO E PÓS-PROCESSAMENTO (APENAS UMA VEZ)
 Lighting.FogStart      = 0
 Lighting.FogEnd        = 1e5
 Lighting.GlobalShadows = false
@@ -99,9 +99,11 @@ Lighting.DescendantAdded:Connect(function(eff)
     end
 end)
 
--- Função que aplica otimizações a um objeto
+-- FUNÇÃO DE OTIMIZAÇÃO DE UM OBJETO
 local function optimize(obj)
-    if CollectionService:HasTag(obj, "FB_Optimized") then return end
+    if CollectionService:HasTag(obj, "FB_Optimized") then
+        return
+    end
     CollectionService:AddTag(obj, "FB_Optimized")
 
     if obj:IsA("ParticleEmitter") or obj:IsA("Trail")
@@ -128,25 +130,29 @@ local function optimize(obj)
     end
 end
 
--- Coloca objeto na fila de otimização
+-- ENFILEIRA OBJETO PARA OTIMIZAÇÃO
 local function enqueue(obj)
     optimizeQueue[#optimizeQueue + 1] = obj
 end
 
--- Reseta apenas as variáveis de estado (respawn e início de lobby)
+-- RESETA O ESTADO – chama sempre que o personagem respawna
 local function resetState()
     optimizeQueue = {}
     fpsBuffer     = {}
     boosterActive = false
     inLobby       = true
+
+    -- sai do lobby após o delay
     task.delay(LOBBY_DELAY, function()
         inLobby = false
     end)
 end
 
--- Conexão única ao Heartbeat para processar FPS e otimizações
+-- HEARTBEAT: monitora FPS e processa otimizações
 RunService.Heartbeat:Connect(function(dt)
-    if inLobby then return end
+    if inLobby then
+        return
+    end
 
     fpsBuffer[#fpsBuffer + 1] = 1/dt
     if #fpsBuffer > SAMPLE_SIZE then
@@ -154,7 +160,9 @@ RunService.Heartbeat:Connect(function(dt)
     end
 
     local sum = 0
-    for _, v in ipairs(fpsBuffer) do sum += v end
+    for _, v in ipairs(fpsBuffer) do
+        sum += v
+    end
     local avgFPS = sum / #fpsBuffer
 
     if not boosterActive and avgFPS < FPS_THRESHOLD then
@@ -166,18 +174,20 @@ RunService.Heartbeat:Connect(function(dt)
 
     for i = 1, BATCH_SIZE do
         local obj = table.remove(optimizeQueue, 1)
-        if not obj then break end
+        if not obj then
+            break
+        end
         optimize(obj)
     end
 end)
 
--- Conexão única a DescendantAdded para enfileirar novos objetos
+-- ENQUADRA NOVOS OBJETOS APÓS BOOSTER ATIVAR
 Workspace.DescendantAdded:Connect(function(obj)
     if boosterActive then
         enqueue(obj)
     end
 end)
 
--- Reseta estado no respawn do personagem
+-- RESET NO RESPAWN DO PERSONAGEM
 player.CharacterAdded:Connect(resetState)
 resetState()
