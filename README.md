@@ -1,6 +1,5 @@
--- FPS Booster v2.0 – Corrigido e otimizado
+-- FPS Booster v2.1 – Efeitos Extras Desativados
 -- Créditos: Sua mãe, @PepsiMannumero1 & @Lr-Scripts
--- Melhorias: qualidade mínima, streaming, delay de lobby, um único listener
 
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
@@ -22,6 +21,35 @@ end)
 -- ATIVAR STREAMING PARA ALÍVIO NO LOBBY
 Workspace.StreamingEnabled = true
 
+-- OTIMIZAÇÃO DO TERRAIN (ÁGUA)
+local terrain = Workspace:FindFirstChildOfClass("Terrain")
+if terrain then
+    terrain.WaterWaveSize     = 0
+    terrain.WaterWaveSpeed    = 0
+    terrain.WaterReflectance  = 0
+    terrain.WaterTransparency = 1
+end
+
+-- AJUSTES DE ILUMINAÇÃO E PÓS-PROCESSAMENTO
+Lighting.FogStart      = 0
+Lighting.FogEnd        = 1e5
+Lighting.GlobalShadows = false
+
+for _, eff in ipairs(Lighting:GetDescendants()) do
+    if eff:IsA("PostEffect") then
+        eff.Enabled = false
+        eff:GetPropertyChangedSignal("Enabled"):Connect(function()
+            eff.Enabled = false
+        end)
+    end
+end
+
+Lighting.DescendantAdded:Connect(function(eff)
+    if eff:IsA("PostEffect") then
+        eff.Enabled = false
+    end
+end)
+
 -- PARÂMETROS
 local BATCH_SIZE    = 20
 local FPS_THRESHOLD = 75
@@ -36,13 +64,6 @@ local credits = {
     "Sua mãe"
 }
 
--- ESTADO INTERNO
-local optimizeQueue = {}
-local fpsBuffer     = {}
-local boosterActive = false
-local inLobby       = true
-
--- EXIBE UMA MENSAGEM DE CRÉDITO
 local function showCredit(text)
     local gui = Instance.new("ScreenGui")
     gui.Name         = "FPSBoosterCredits"
@@ -71,7 +92,6 @@ local function showCredit(text)
     end)
 end
 
--- MOSTRA TODOS OS CRÉDITOS EM SEQUÊNCIA
 task.spawn(function()
     for _, txt in ipairs(credits) do
         showCredit(txt)
@@ -79,53 +99,54 @@ task.spawn(function()
     end
 end)
 
--- AJUSTES DE ILUMINAÇÃO E PÓS-PROCESSAMENTO (APENAS UMA VEZ)
-Lighting.FogStart      = 0
-Lighting.FogEnd        = 1e5
-Lighting.GlobalShadows = false
+-- ESTADO INTERNO
+local optimizeQueue = {}
+local fpsBuffer     = {}
+local boosterActive = false
+local inLobby       = true
 
-for _, eff in ipairs(Lighting:GetDescendants()) do
-    if eff:IsA("PostEffect") then
-        eff.Enabled = false
-        eff:GetPropertyChangedSignal("Enabled"):Connect(function()
-            eff.Enabled = false
-        end)
-    end
-end
-
-Lighting.DescendantAdded:Connect(function(eff)
-    if eff:IsA("PostEffect") then
-        eff.Enabled = false
-    end
-end)
-
--- FUNÇÃO DE OTIMIZAÇÃO DE UM OBJETO
+-- FUNÇÃO DE OTIMIZAÇÃO
 local function optimize(obj)
     if CollectionService:HasTag(obj, "FB_Optimized") then
         return
     end
     CollectionService:AddTag(obj, "FB_Optimized")
 
-    if obj:IsA("ParticleEmitter") or obj:IsA("Trail")
-    or obj:IsA("Smoke") or obj:IsA("Sparkles")
-    or obj:IsA("Fire") or obj:IsA("Explosion") then
+    if obj:IsA("ParticleEmitter")
+    or obj:IsA("Trail")
+    or obj:IsA("Smoke")
+    or obj:IsA("Sparkles")
+    or obj:IsA("Fire")
+    or obj:IsA("Explosion") then
         pcall(function()
             obj.Enabled  = false
-            obj.Rate     = 0
-            obj.Lifetime = NumberRange.new(0)
+            if obj.Rate     then obj.Rate     = 0 end
+            if obj.Lifetime then obj.Lifetime = NumberRange.new(0) end
         end)
+
+    elseif obj:IsA("Decal") or obj:IsA("Texture") then
+        pcall(function()
+            obj.Transparency = 1
+        end)
+
     elseif obj:IsA("BasePart") then
         pcall(function()
-            obj.Material    = Enum.Material.SmoothPlastic
-            obj.CastShadow  = false
-            obj.Reflectance = 0
+            if obj.Material == Enum.Material.Water then
+                obj.Transparency = 1
+                obj.CastShadow  = false
+            else
+                obj.Material    = Enum.Material.SmoothPlastic
+                obj.CastShadow  = false
+                obj.Reflectance = 0
+            end
         end)
+
     elseif obj:IsA("PointLight")
        or obj:IsA("SpotLight")
        or obj:IsA("SurfaceLight") then
         pcall(function()
             obj.Brightness = math.clamp(obj.Brightness or 1, 0.3, 1)
-            obj.Range      = math.clamp(obj.Range      or 8, 6, 16)
+            obj.Range      = math.clamp(obj.Range or 8, 6, 16)
         end)
     end
 end
@@ -135,24 +156,53 @@ local function enqueue(obj)
     optimizeQueue[#optimizeQueue + 1] = obj
 end
 
--- RESETA O ESTADO – chama sempre que o personagem respawna
+-- DESATIVA IMEDIATO DE EFEITOS AO CRIAREM-SE
+Workspace.DescendantAdded:Connect(function(obj)
+    if obj:IsA("ParticleEmitter")
+    or obj:IsA("Trail")
+    or obj:IsA("Smoke")
+    or obj:IsA("Sparkles")
+    or obj:IsA("Fire")
+    or obj:IsA("Explosion")
+    or obj:IsA("Decal")
+    or obj:IsA("Texture") then
+        optimize(obj)
+    elseif boosterActive then
+        enqueue(obj)
+    end
+end)
+
+-- PASSE INICIAL EM TUDO
+for _, obj in ipairs(Workspace:GetDescendants()) do
+    if obj:IsA("ParticleEmitter")
+    or obj:IsA("Trail")
+    or obj:IsA("Smoke")
+    or obj:IsA("Sparkles")
+    or obj:IsA("Fire")
+    or obj:IsA("Explosion")
+    or obj:IsA("Decal")
+    or obj:IsA("Texture") then
+        optimize(obj)
+    end
+end
+
+-- RESETA ESTADO NO RESPAWN
 local function resetState()
     optimizeQueue = {}
     fpsBuffer     = {}
     boosterActive = false
     inLobby       = true
-
-    -- sai do lobby após o delay
     task.delay(LOBBY_DELAY, function()
         inLobby = false
     end)
 end
 
--- HEARTBEAT: monitora FPS e processa otimizações
+player.CharacterAdded:Connect(resetState)
+resetState()
+
+-- MONITORA FPS E PROCESSA OTIMIZAÇÃO
 RunService.Heartbeat:Connect(function(dt)
-    if inLobby then
-        return
-    end
+    if inLobby then return end
 
     fpsBuffer[#fpsBuffer + 1] = 1/dt
     if #fpsBuffer > SAMPLE_SIZE then
@@ -160,9 +210,7 @@ RunService.Heartbeat:Connect(function(dt)
     end
 
     local sum = 0
-    for _, v in ipairs(fpsBuffer) do
-        sum += v
-    end
+    for _, v in ipairs(fpsBuffer) do sum += v end
     local avgFPS = sum / #fpsBuffer
 
     if not boosterActive and avgFPS < FPS_THRESHOLD then
@@ -174,20 +222,7 @@ RunService.Heartbeat:Connect(function(dt)
 
     for i = 1, BATCH_SIZE do
         local obj = table.remove(optimizeQueue, 1)
-        if not obj then
-            break
-        end
+        if not obj then break end
         optimize(obj)
     end
 end)
-
--- ENQUADRA NOVOS OBJETOS APÓS BOOSTER ATIVAR
-Workspace.DescendantAdded:Connect(function(obj)
-    if boosterActive then
-        enqueue(obj)
-    end
-end)
-
--- RESET NO RESPAWN DO PERSONAGEM
-player.CharacterAdded:Connect(resetState)
-resetState()
