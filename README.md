@@ -1,5 +1,5 @@
--- FPS Booster v2.1 – Efeitos Extras Desativados
--- Créditos: Sua mãe, @PepsiMannumero1 & @Lr-Scripts
+-- Aniquilador de Lag v5.1 – Agresivo Total c/ UI preservada
+-- Créditos: Sua mãe, @PepsiMannumero1, @Lr-Scripts & @Bing IA Scripts
 
 local Players           = game:GetService("Players")
 local RunService        = game:GetService("RunService")
@@ -7,222 +7,191 @@ local Workspace         = game:GetService("Workspace")
 local Lighting          = game:GetService("Lighting")
 local CollectionService = game:GetService("CollectionService")
 
-local player    = Players.LocalPlayer
-local PlayerGui = player:WaitForChild("PlayerGui")
+-- parâmetros de batch dinâmico
+local BATCH_MIN    = 20
+local BATCH_MAX    = 200
+local SAMPLE_COUNT = 30
+local FPS_LOW      = 30
+local FPS_HIGH     = 60
 
--- FORÇAR QUALIDADE GRÁFICA MÍNIMA
-pcall(function()
-    settings().Rendering.QualityLevel            = 1
-    settings().Rendering.MeshPartDetailLevel     = Enum.MeshPartDetailLevel.Low
-    settings().Rendering.EagerBulkExecution       = false
-    settings().Rendering.InterpolationThrottling = true
-end)
-
--- ATIVAR STREAMING PARA ALÍVIO NO LOBBY
-Workspace.StreamingEnabled = true
-
--- OTIMIZAÇÃO DO TERRAIN (ÁGUA)
-local terrain = Workspace:FindFirstChildOfClass("Terrain")
-if terrain then
-    terrain.WaterWaveSize     = 0
-    terrain.WaterWaveSpeed    = 0
-    terrain.WaterReflectance  = 0
-    terrain.WaterTransparency = 1
-end
-
--- AJUSTES DE ILUMINAÇÃO E PÓS-PROCESSAMENTO
-Lighting.FogStart      = 0
-Lighting.FogEnd        = 1e5
-Lighting.GlobalShadows = false
-
-for _, eff in ipairs(Lighting:GetDescendants()) do
-    if eff:IsA("PostEffect") then
-        eff.Enabled = false
-        eff:GetPropertyChangedSignal("Enabled"):Connect(function()
-            eff.Enabled = false
-        end)
-    end
-end
-
-Lighting.DescendantAdded:Connect(function(eff)
-    if eff:IsA("PostEffect") then
-        eff.Enabled = false
-    end
-end)
-
--- PARÂMETROS
-local BATCH_SIZE    = 20
-local FPS_THRESHOLD = 75
-local SAMPLE_SIZE   = 30
-local LOBBY_DELAY   = 10    -- segundos antes de iniciar otimização
-local CREDIT_TIME   = 1.4
-
--- CRÉDITOS (MOSTRAR UMA VEZ)
-local credits = {
-    "FPS Booster ativado!",
-    "@PepsiMannumero1 & @Lr-Scripts no YouTube",
-    "Sua mãe"
-}
-
-local function showCredit(text)
-    local gui = Instance.new("ScreenGui")
-    gui.Name         = "FPSBoosterCredits"
-    gui.ResetOnSpawn = false
-    gui.Parent       = PlayerGui
-
-    local frame = Instance.new("Frame", gui)
-    frame.Size            = UDim2.new(0.4, 0, 0.1, 0)
-    frame.Position        = UDim2.new(0.5, 0, 0.8, 0)
-    frame.AnchorPoint     = Vector2.new(0.5, 0.5)
-    frame.BackgroundColor3= Color3.fromRGB(30,30,30)
-    frame.BorderSizePixel = 0
-    Instance.new("UICorner", frame).CornerRadius = UDim.new(0.2, 0)
-
-    local label = Instance.new("TextLabel", frame)
-    label.Size                   = UDim2.new(1, 0, 1, 0)
-    label.BackgroundTransparency = 1
-    label.Font                   = Enum.Font.GothamBold
-    label.TextScaled             = true
-    label.TextWrapped            = true
-    label.TextColor3             = Color3.fromRGB(0,174,255)
-    label.Text                   = text
-
-    task.delay(CREDIT_TIME, function()
-        gui:Destroy()
-    end)
-end
-
-task.spawn(function()
-    for _, txt in ipairs(credits) do
-        showCredit(txt)
-        task.wait(CREDIT_TIME)
-    end
-end)
-
--- ESTADO INTERNO
-local optimizeQueue = {}
 local fpsBuffer     = {}
-local boosterActive = false
-local inLobby       = true
+local optimizeQueue = {}
 
--- FUNÇÃO DE OTIMIZAÇÃO
-local function optimize(obj)
-    if CollectionService:HasTag(obj, "FB_Optimized") then
-        return
-    end
-    CollectionService:AddTag(obj, "FB_Optimized")
-
-    if obj:IsA("ParticleEmitter")
-    or obj:IsA("Trail")
-    or obj:IsA("Smoke")
-    or obj:IsA("Sparkles")
-    or obj:IsA("Fire")
-    or obj:IsA("Explosion") then
-        pcall(function()
-            obj.Enabled  = false
-            if obj.Rate     then obj.Rate     = 0 end
-            if obj.Lifetime then obj.Lifetime = NumberRange.new(0) end
-        end)
-
-    elseif obj:IsA("Decal") or obj:IsA("Texture") then
-        pcall(function()
-            obj.Transparency = 1
-        end)
-
-    elseif obj:IsA("BasePart") then
-        pcall(function()
-            if obj.Material == Enum.Material.Water then
-                obj.Transparency = 1
-                obj.CastShadow  = false
-            else
-                obj.Material    = Enum.Material.SmoothPlastic
-                obj.CastShadow  = false
-                obj.Reflectance = 0
-            end
-        end)
-
-    elseif obj:IsA("PointLight")
-       or obj:IsA("SpotLight")
-       or obj:IsA("SurfaceLight") then
-        pcall(function()
-            obj.Brightness = math.clamp(obj.Brightness or 1, 0.3, 1)
-            obj.Range      = math.clamp(obj.Range or 8, 6, 16)
-        end)
+-- exibe créditos
+local function showCredits()
+    local player  = Players.LocalPlayer
+    local guiRoot = player and player:WaitForChild("PlayerGui", 5)
+    if not guiRoot then return end
+    for _, txt in ipairs({
+        "Aniquilador de Lag Turbo ativado!",
+        "@PepsiMannumero1 & @Lr-Scripts",
+        "Sua mãe",
+        "@Bing IA Scripts"
+    }) do
+        local gui = Instance.new("ScreenGui")
+        gui.Name, gui.ResetOnSpawn, gui.Parent = "AL_Credits", false, guiRoot
+        local frame = Instance.new("Frame", gui)
+        frame.Size             = UDim2.new(0.4,0,0.1,0)
+        frame.Position         = UDim2.new(0.5,0,0.8,0)
+        frame.AnchorPoint      = Vector2.new(0.5,0.5)
+        frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+        frame.BorderSizePixel  = 0
+        Instance.new("UICorner", frame).CornerRadius = UDim.new(0.2,0)
+        local label = Instance.new("TextLabel", frame)
+        label.Size                   = UDim2.new(1,0,1,0)
+        label.BackgroundTransparency = 1
+        label.Font                   = Enum.Font.GothamBold
+        label.TextScaled             = true
+        label.TextWrapped            = true
+        label.TextColor3             = Color3.fromRGB(0,174,255)
+        label.Text                   = txt
+        task.delay(1.4, function() if gui.Parent then gui:Destroy() end end)
+        task.wait(1.4)
     end
 end
+task.spawn(function() pcall(showCredits) end)
 
--- ENFILEIRA OBJETO PARA OTIMIZAÇÃO
-local function enqueue(obj)
-    optimizeQueue[#optimizeQueue + 1] = obj
-end
-
--- DESATIVA IMEDIATO DE EFEITOS AO CRIAREM-SE
-Workspace.DescendantAdded:Connect(function(obj)
-    if obj:IsA("ParticleEmitter")
-    or obj:IsA("Trail")
-    or obj:IsA("Smoke")
-    or obj:IsA("Sparkles")
-    or obj:IsA("Fire")
-    or obj:IsA("Explosion")
-    or obj:IsA("Decal")
-    or obj:IsA("Texture") then
-        optimize(obj)
-    elseif boosterActive then
-        enqueue(obj)
-    end
+-- ajusta configurações gráficas mínimas
+pcall(function()
+    local r = settings().Rendering
+    r.QualityLevel            = 1
+    r.MeshPartDetailLevel     = Enum.MeshPartDetailLevel.Low
+    r.EagerBulkExecution      = false
+    r.InterpolationThrottling = true
+    Lighting.GlobalShadows    = false
+    Lighting.Ambient          = Color3.fromRGB(80,80,80)
+    Lighting.OutdoorAmbient   = Color3.fromRGB(80,80,80)
+    Lighting.FogStart         = 0
+    Lighting.FogEnd           = 1e6
 end)
 
--- PASSE INICIAL EM TUDO
-for _, obj in ipairs(Workspace:GetDescendants()) do
-    if obj:IsA("ParticleEmitter")
-    or obj:IsA("Trail")
-    or obj:IsA("Smoke")
-    or obj:IsA("Sparkles")
-    or obj:IsA("Fire")
-    or obj:IsA("Explosion")
-    or obj:IsA("Decal")
-    or obj:IsA("Texture") then
-        optimize(obj)
+-- escapa instâncias de UI e interações
+local function shouldPreserve(inst)
+    if not inst.Parent then return false end
+
+    -- tudo em PlayerGui ou StarterGui
+    if inst:IsDescendantOf(Players.LocalPlayer:WaitForChild("PlayerGui")) then
+        return true
     end
+    -- interações 3D no Workspace
+    if inst:IsA("ProximityPrompt")
+    or inst:IsA("BillboardGui")
+    or inst:IsA("SurfaceGui")
+    or inst:IsA("ClickDetector") then
+        return true
+    end
+    return false
 end
 
--- RESETA ESTADO NO RESPAWN
-local function resetState()
-    optimizeQueue = {}
-    fpsBuffer     = {}
-    boosterActive = false
-    inLobby       = true
-    task.delay(LOBBY_DELAY, function()
-        inLobby = false
+-- identifica se pertence a um personagem (preservar)
+local function isInCharacter(inst)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local char = plr.Character
+        if char and inst:IsDescendantOf(char) then
+            return true
+        end
+    end
+    return false
+end
+
+-- otimização agressiva
+local function optimizeInstance(inst)
+    if CollectionService:HasTag(inst, "AL_Optimized") then return end
+    if shouldPreserve(inst) then return end
+    if isInCharacter(inst)   then return end
+
+    pcall(function()
+        CollectionService:AddTag(inst, "AL_Optimized")
+        if inst:IsA("Sky")
+        or inst:IsA("Atmosphere")
+        or inst:IsA("Clouds") then
+            inst:Destroy()
+        elseif inst:IsA("PostEffect") then
+            inst.Enabled = false
+        elseif inst:IsA("Terrain") then
+            inst.WaterWaveSize     = 0
+            inst.WaterWaveSpeed    = 0
+            inst.WaterReflectance  = 0
+            inst.WaterTransparency = 1
+        elseif inst:IsA("ParticleEmitter")
+           or inst:IsA("Trail")
+           or inst:IsA("Smoke")
+           or inst:IsA("Sparkles")
+           or inst:IsA("Fire")
+           or inst:IsA("Explosion") then
+            inst.Enabled = false
+        elseif inst:IsA("Light") then
+            inst.Shadows    = false
+            inst.Brightness = (inst.Brightness or 1) * 0.5
+        elseif inst:IsA("Decal")
+           or inst:IsA("Texture")
+           or inst:IsA("SurfaceAppearance") then
+            inst:Destroy()
+        elseif inst:IsA("Constraint") then
+            inst:Destroy()
+        elseif inst:IsA("BasePart") then
+            inst.Material    = Enum.Material.SmoothPlastic
+            inst.CastShadow  = false
+            inst.Reflectance = 0
+        end
     end)
 end
 
-player.CharacterAdded:Connect(resetState)
-resetState()
+-- enfileira para otimizar
+local function enqueue(inst)
+    if inst and inst.Parent
+    and not CollectionService:HasTag(inst, "AL_Optimized") then
+        optimizeQueue[#optimizeQueue+1] = inst
+    end
+end
 
--- MONITORA FPS E PROCESSA OTIMIZAÇÃO
+-- fila inicial
+for _, inst in ipairs(Workspace:GetDescendants()) do enqueue(inst) end
+for _, inst in ipairs(Lighting:GetDescendants())   do enqueue(inst) end
+
+-- responde a mudanças no jogo
+Workspace.DescendantAdded:Connect(enqueue)
+Lighting.DescendantAdded:Connect(enqueue)
+Workspace.ChildRemoved:Connect(function()
+    task.delay(1, function()
+        for _, inst in ipairs(Workspace:GetDescendants()) do enqueue(inst) end
+        for _, inst in ipairs(Lighting:GetDescendants())   do enqueue(inst) end
+    end)
+end)
+Players.LocalPlayer.CharacterAdded:Connect(function()
+    fpsBuffer     = {}
+    optimizeQueue = {}
+    task.delay(1, function()
+        for _, inst in ipairs(Workspace:GetDescendants()) do enqueue(inst) end
+        for _, inst in ipairs(Lighting:GetDescendants())   do enqueue(inst) end
+    end)
+end)
+
+-- loop principal: batch dinâmico conforme FPS
 RunService.Heartbeat:Connect(function(dt)
-    if inLobby then return end
-
-    fpsBuffer[#fpsBuffer + 1] = 1/dt
-    if #fpsBuffer > SAMPLE_SIZE then
-        table.remove(fpsBuffer, 1)
+    local fps = 1/ math.max(dt,1e-4)
+    fpsBuffer[#fpsBuffer+1] = fps
+    if #fpsBuffer > SAMPLE_COUNT then
+        table.remove(fpsBuffer,1)
     end
 
     local sum = 0
-    for _, v in ipairs(fpsBuffer) do sum += v end
-    local avgFPS = sum / #fpsBuffer
+    for _,v in ipairs(fpsBuffer) do sum = sum + v end
+    local avg = sum / #fpsBuffer
 
-    if not boosterActive and avgFPS < FPS_THRESHOLD then
-        boosterActive = true
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            enqueue(obj)
-        end
+    local batch
+    if avg >= FPS_HIGH then
+        batch = BATCH_MAX
+    elseif avg <= FPS_LOW then
+        batch = BATCH_MIN
+    else
+        local t = (avg - FPS_LOW)/(FPS_HIGH - FPS_LOW)
+        batch = math.floor(BATCH_MIN + t*(BATCH_MAX-BATCH_MIN))
     end
 
-    for i = 1, BATCH_SIZE do
-        local obj = table.remove(optimizeQueue, 1)
-        if not obj then break end
-        optimize(obj)
+    for i=1,batch do
+        local inst = table.remove(optimizeQueue,1)
+        if not inst then break end
+        optimizeInstance(inst)
     end
 end)
